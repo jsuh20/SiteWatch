@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SiteWatch</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #0f0f0f; color: #e8e8e8; min-height: 100dvh; }
+
+    header { padding: 16px 24px; border-bottom: 1px solid #222; display: flex; align-items: center; justify-content: space-between; }
+    header h1 { font-size: 16px; font-weight: 600; }
+    #user-id { font-size: 12px; color: #555; }
+
+    main { max-width: 900px; margin: 0 auto; padding: 32px 24px; display: flex; flex-direction: column; gap: 32px; }
+
+    /* Add monitor form */
+    .card { background: #141414; border: 1px solid #222; border-radius: 12px; padding: 20px; }
+    .card h2 { font-size: 14px; font-weight: 600; margin-bottom: 16px; color: #aaa; text-transform: uppercase; letter-spacing: 0.06em; }
+
+    .form-row { display: flex; gap: 10px; flex-wrap: wrap; }
+    input[type="text"], input[type="number"], input[type="url"] {
+      background: #1c1c1c; border: 1px solid #2a2a2a; color: #e8e8e8;
+      padding: 10px 12px; border-radius: 8px; font-size: 13px; outline: none; flex: 1; min-width: 160px;
+    }
+    input:focus { border-color: #444; }
+    input::placeholder { color: #555; }
+    .btn {
+      background: #1a6aff; border: none; color: #fff;
+      padding: 10px 20px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500; white-space: nowrap;
+    }
+    .btn:hover { background: #1558e0; }
+    .btn-danger { background: none; border: 1px solid #3a1a1a; color: #ef5350; }
+    .btn-danger:hover { background: #3a1a1a; }
+    .btn-sm { padding: 5px 12px; font-size: 12px; }
+
+    /* Monitors list */
+    .monitor-row {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 12px 0; border-bottom: 1px solid #1e1e1e;
+    }
+    .monitor-row:last-child { border-bottom: none; }
+    .monitor-url { font-size: 13px; color: #ccc; font-family: monospace; }
+    .monitor-meta { font-size: 11px; color: #555; margin-top: 3px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .dot-green { background: #4caf50; box-shadow: 0 0 6px #4caf5088; }
+    .dot-red   { background: #ef5350; box-shadow: 0 0 6px #ef535088; }
+    .dot-grey  { background: #555; }
+
+    /* Incidents */
+    .incident-card {
+      background: #141414; border: 1px solid #222; border-radius: 10px;
+      padding: 14px 16px; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+    }
+    .incident-card.escalated { border-color: #3a1a1a; }
+    .incident-card.investigating { border-color: #1a2a3a; }
+    .badge {
+      font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 4px;
+      text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap; flex-shrink: 0;
+    }
+    .badge-new          { background: #2a2a2a; color: #888; }
+    .badge-investigating{ background: #1a2a3a; color: #42a5f5; }
+    .badge-escalated    { background: #3a1a1a; color: #ef5350; }
+    .badge-resolved     { background: #1a3a1a; color: #66bb6a; }
+    .badge-low    { background: #1e2e1e; color: #81c784; }
+    .badge-medium { background: #2e2a1a; color: #ffb74d; }
+    .badge-high   { background: #3a1a1a; color: #ef5350; }
+
+    .incident-url { font-size: 13px; color: #ccc; font-family: monospace; }
+    .incident-meta { font-size: 11px; color: #555; margin-top: 4px; }
+    .incident-reason { font-size: 12px; color: #888; margin-top: 6px; font-style: italic; }
+
+    /* Audit log */
+    #audit-log {
+      background: #0a0a0a; border: 1px solid #1e1e1e; border-radius: 8px;
+      padding: 12px; max-height: 200px; overflow-y: auto;
+      font-family: monospace; font-size: 11px; color: #555;
+      display: flex; flex-direction: column; gap: 3px;
+    }
+
+    .empty { color: #444; font-size: 13px; padding: 8px 0; }
+
+    .incidents-grid { display: flex; flex-direction: column; gap: 8px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>⚡ SiteWatch</h1>
+  <span id="user-id">user: default</span>
+</header>
+
+<main>
+
+  <!-- Add Monitor -->
+  <div class="card">
+    <h2>Add Monitor</h2>
+    <div class="form-row">
+      <input type="url" id="input-url" placeholder="https://yoursite.com/checkout" />
+      <input type="number" id="input-interval" placeholder="Interval (sec)" value="30" min="10" style="max-width:160px" />
+      <input type="number" id="input-threshold" placeholder="Fail threshold" value="2" min="1" style="max-width:140px" />
+      <button class="btn" id="add-btn">Start Monitoring</button>
+    </div>
+  </div>
+
+  <!-- Active Monitors -->
+  <div class="card">
+    <h2>Monitors</h2>
+    <div id="monitors-list"><p class="empty">No monitors yet.</p></div>
+  </div>
+
+  <!-- Incidents -->
+  <div class="card">
+    <h2>Incidents</h2>
+    <div id="incidents-list" class="incidents-grid"><p class="empty">No incidents.</p></div>
+  </div>
+
+  <!-- Audit Log -->
+  <div class="card">
+    <h2>Audit Log</h2>
+    <div id="audit-log"><span style="color:#444">Empty.</span></div>
+  </div>
+
+</main>
+
+<script>
+  const USER_ID = "default";
+
+  async function addMonitor() {
+    const url = document.getElementById("input-url").value.trim();
+    const interval = parseInt(document.getElementById("input-interval").value) || 30;
+    const threshold = parseInt(document.getElementById("input-threshold").value) || 2;
+    if (!url) return alert("Enter a URL to monitor.");
+
+    const btn = document.getElementById("add-btn");
+    btn.disabled = true;
+    btn.textContent = "Starting…";
+
+    try {
+      const res = await fetch("/api/monitor", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: USER_ID, url, interval_seconds: interval, failure_threshold: threshold }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      document.getElementById("input-url").value = "";
+      await refreshState();
+    } catch (e) {
+      alert("Error: " + e.message);
+    }
+
+    btn.disabled = false;
+    btn.textContent = "Start Monitoring";
+  }
+
+  async function stopMonitor(monitorId) {
+    await fetch("/api/monitor", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: USER_ID, monitorId }),
+    });
+    await refreshState();
+  }
+
+  async function resolveIncident(incidentId) {
+    await fetch("/api/resolve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: USER_ID, incidentId }),
+    });
+    await refreshState();
+  }
+
+  async function refreshState() {
+    const res = await fetch(`/api/state?userId=${USER_ID}`);
+    const state = await res.json();
+    renderMonitors(Object.values(state.monitors ?? {}));
+    renderIncidents(Object.values(state.incidents ?? {}));
+    renderAuditLog(state.auditLog ?? []);
+  }
+
+  function renderMonitors(monitors) {
+    const el = document.getElementById("monitors-list");
+    if (!monitors.length) { el.innerHTML = '<p class="empty">No monitors yet.</p>'; return; }
+
+    el.innerHTML = monitors.map(m => {
+      const hasOpenIncident = false; // will be inferred from incidents
+      return `
+        <div class="monitor-row">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div class="dot ${m.active ? 'dot-green' : 'dot-grey'}"></div>
+            <div>
+              <div class="monitor-url">${m.url}</div>
+              <div class="monitor-meta">every ${m.interval_seconds}s · threshold: ${m.failure_threshold} · ${m.active ? 'active' : 'stopped'}</div>
+            </div>
+          </div>
+          ${m.active ? `<button class="btn btn-danger btn-sm" onclick="stopMonitor('${m.monitorId}')">Stop</button>` : ''}
+        </div>`;
+    }).join("");
+  }
+
+  function renderIncidents(incidents) {
+    const el = document.getElementById("incidents-list");
+    const open = incidents.filter(i => i.status !== "RESOLVED");
+    const resolved = incidents.filter(i => i.status === "RESOLVED").slice(-3);
+    const all = [...open, ...resolved];
+
+    if (!all.length) { el.innerHTML = '<p class="empty">No incidents.</p>'; return; }
+
+    el.innerHTML = all.map(i => {
+      const cls = i.status === "ESCALATED" ? "escalated" : i.status === "INVESTIGATING" ? "investigating" : "";
+      const lastDecision = i.decisions?.[i.decisions.length - 1];
+      return `
+        <div class="incident-card ${cls}">
+          <div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+              <span class="badge badge-${i.status.toLowerCase()}">${i.status}</span>
+              ${lastDecision ? `<span class="badge badge-${lastDecision.severity}">${lastDecision.severity}</span>` : ''}
+            </div>
+            <div class="incident-url">${i.url}</div>
+            ${lastDecision ? `<div class="incident-reason">${lastDecision.reason}</div>` : ''}
+            <div class="incident-meta">opened ${new Date(i.createdAt).toLocaleTimeString()} · updated ${new Date(i.updatedAt).toLocaleTimeString()}</div>
+          </div>
+          ${i.status !== "RESOLVED"
+            ? `<button class="btn btn-sm" style="background:#1a3a1a;color:#66bb6a;border:none" onclick="resolveIncident('${i.id}')">Resolve</button>`
+            : ''}
+        </div>`;
+    }).join("");
+  }
+
+  function renderAuditLog(log) {
+    const el = document.getElementById("audit-log");
+    if (!log.length) { el.innerHTML = '<span style="color:#444">Empty.</span>'; return; }
+    el.innerHTML = [...log].reverse().map(e => `<div>${e}</div>`).join("");
+  }
+
+  document.getElementById("add-btn").addEventListener("click", addMonitor);
+  document.getElementById("input-url").addEventListener("keydown", e => {
+    if (e.key === "Enter") addMonitor();
+  });
+
+  // Poll state every 5 seconds
+  refreshState();
+  setInterval(refreshState, 5000);
+</script>
+</body>
+</html>

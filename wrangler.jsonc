@@ -1,0 +1,38 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "agent-worker",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-02-27",
+	"compatibility_flags": ["nodejs_compat"],
+	"migrations": [
+		{
+			"new_sqlite_classes": ["AgentDO"],
+			"tag": "v1"
+		}
+	],
+	"durable_objects": {
+		"bindings": [
+			{
+				"class_name": "AgentDO",
+				"name": "AGENT_DO"
+			}
+		]
+	},
+	"workflows": [
+		{
+			"name": "monitor-workflow",
+			"binding": "WORKFLOW",
+			"class_name": "MonitorWorkflow"
+		}
+	],
+	"ai": {
+		"binding": "AI"
+	},
+	"assets": {
+		"directory": "./public/",
+		"binding": "ASSETS"
+	},
+	"observability": {
+		"enabled": true
+	}
+}
