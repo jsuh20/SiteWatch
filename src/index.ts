@@ -131,6 +131,74 @@ export default {
 			return Response.json(state);
 		}
 
+		// POST /api/chat — natural language interface
+		if (url.pathname === "/api/chat" && request.method === "POST") {
+			const { userId = "default", message } = await request.json<{ userId: string; message: string }>();
+			if (!message) return Response.json({ error: "message is required" }, { status: 400 });
+
+			const state = await getAgent(env, userId).getDebugState();
+			const monitors = Object.values(state.monitors) as import("./do/AgentDO").MonitorConfig[];
+			const incidents = (Object.values(state.incidents) as import("./do/AgentDO").Incident[]).filter(i => i.status !== "RESOLVED");
+
+			const systemPrompt = `You are SiteWatch, an AI assistant that helps users manage website monitors and incidents.
+
+Current state:
+- Active monitors: ${monitors.filter(m => m.active).map(m => m.url).join(", ") || "none"}
+- Open incidents: ${incidents.map(i => `${i.url} (${i.status})`).join(", ") || "none"}
+
+You can perform these actions by responding with a JSON block at the end of your reply:
+<action>{ "type": "add_monitor", "url": "...", "interval_seconds": 30, "failure_threshold": 2 }</action>
+<action>{ "type": "stop_monitor", "monitorId": "..." }</action>
+<action>{ "type": "resolve_incident", "incidentId": "..." }</action>
+<action>{ "type": "none" }</action>
+
+Always respond conversationally first, then include the action block. If the user asks to monitor a URL, extract it and use add_monitor. If they ask about status, describe what you see. Keep replies short.`;
+
+			const aiResponse = await env.AI.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast", {
+				messages: [
+					{ role: "system", content: systemPrompt },
+					{ role: "user", content: message },
+				],
+			} as any);
+
+			const text = (aiResponse as any).response as string;
+
+			// Parse action block
+			const actionMatch = text.match(/<action>([\s\S]*?)<\/action>/);
+			let reply = text.replace(/<action>[\s\S]*?<\/action>/, "").trim();
+			let actionResult = null;
+
+			if (actionMatch) {
+				try {
+					const action = JSON.parse(actionMatch[1].trim());
+					const agent = getAgent(env, userId);
+
+					if (action.type === "add_monitor" && action.url) {
+						const monitorId = crypto.randomUUID();
+						await agent.createMonitor({
+							monitorId,
+							userId,
+							url: action.url,
+							interval_seconds: action.interval_seconds ?? 30,
+							failure_threshold: action.failure_threshold ?? 2,
+						});
+						await env.WORKFLOW.create({ params: { userId, monitorId } });
+						actionResult = { type: "add_monitor", monitorId, url: action.url };
+					} else if (action.type === "stop_monitor" && action.monitorId) {
+						await agent.deactivateMonitor(action.monitorId);
+						actionResult = { type: "stop_monitor" };
+					} else if (action.type === "resolve_incident" && action.incidentId) {
+						await agent.resolveIncident(action.incidentId);
+						actionResult = { type: "resolve_incident" };
+					}
+				} catch {
+					// Ignore parse errors — just return the reply
+				}
+			}
+
+			return Response.json({ reply, action: actionResult });
+		}
+
 		// Serve the UI
 		return env.ASSETS.fetch(request);
 	},

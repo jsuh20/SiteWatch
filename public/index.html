@@ -81,6 +81,29 @@
     .empty { color: #444; font-size: 13px; padding: 8px 0; }
 
     .incidents-grid { display: flex; flex-direction: column; gap: 8px; }
+
+    /* Chat */
+    #chat-messages {
+      display: flex; flex-direction: column; gap: 10px;
+      max-height: 320px; overflow-y: auto; margin-bottom: 12px;
+    }
+    .chat-msg { display: flex; flex-direction: column; gap: 2px; }
+    .chat-msg.user { align-items: flex-end; }
+    .chat-msg.agent { align-items: flex-start; }
+    .chat-bubble {
+      padding: 9px 13px; border-radius: 10px; font-size: 13px; line-height: 1.5; max-width: 85%;
+    }
+    .user .chat-bubble { background: #1a6aff; color: #fff; border-bottom-right-radius: 3px; }
+    .agent .chat-bubble { background: #1c1c1c; border: 1px solid #2a2a2a; color: #ddd; border-bottom-left-radius: 3px; }
+    .chat-action-tag { font-size: 10px; color: #4caf50; margin-top: 3px; }
+    .chat-input-row { display: flex; gap: 8px; }
+    #chat-input {
+      flex: 1; background: #1c1c1c; border: 1px solid #2a2a2a; color: #e8e8e8;
+      padding: 10px 12px; border-radius: 8px; font-size: 13px; outline: none;
+    }
+    #chat-input:focus { border-color: #444; }
+    #chat-input::placeholder { color: #555; }
+    .chat-hint { font-size: 11px; color: #444; margin-top: 8px; }
   </style>
 </head>
 <body>
@@ -91,6 +114,17 @@
 </header>
 
 <main>
+
+  <!-- Chat -->
+  <div class="card">
+    <h2>Chat</h2>
+    <div id="chat-messages"></div>
+    <div class="chat-input-row">
+      <input type="text" id="chat-input" placeholder="e.g. Monitor https://example.com every 60 seconds" />
+      <button class="btn" id="chat-btn">Send</button>
+    </div>
+    <p class="chat-hint">Try: "What monitors are active?" · "Monitor https://httpbin.org/status/500" · "Resolve all incidents"</p>
+  </div>
 
   <!-- Add Monitor -->
   <div class="card">
@@ -234,6 +268,62 @@
     if (!log.length) { el.innerHTML = '<span style="color:#444">Empty.</span>'; return; }
     el.innerHTML = [...log].reverse().map(e => `<div>${e}</div>`).join("");
   }
+
+  // ── Chat ──────────────────────────────────────────────────────────────────
+  function appendMessage(role, text, actionTag) {
+    const wrap = document.createElement("div");
+    wrap.className = `chat-msg ${role}`;
+    const bubble = document.createElement("div");
+    bubble.className = "chat-bubble";
+    bubble.textContent = text;
+    wrap.appendChild(bubble);
+    if (actionTag) {
+      const tag = document.createElement("div");
+      tag.className = "chat-action-tag";
+      tag.textContent = actionTag;
+      wrap.appendChild(tag);
+    }
+    document.getElementById("chat-messages").appendChild(wrap);
+    wrap.scrollIntoView({ behavior: "smooth" });
+  }
+
+  async function sendChat() {
+    const input = document.getElementById("chat-input");
+    const message = input.value.trim();
+    if (!message) return;
+
+    input.value = "";
+    appendMessage("user", message, null);
+
+    const btn = document.getElementById("chat-btn");
+    btn.disabled = true;
+    btn.textContent = "…";
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: USER_ID, message }),
+      });
+      const data = await res.json();
+      let actionTag = null;
+      if (data.action?.type === "add_monitor") actionTag = `✓ Started monitoring ${data.action.url}`;
+      else if (data.action?.type === "stop_monitor") actionTag = "✓ Monitor stopped";
+      else if (data.action?.type === "resolve_incident") actionTag = "✓ Incident resolved";
+      appendMessage("agent", data.reply, actionTag);
+      if (data.action && data.action.type !== "none") await refreshState();
+    } catch (e) {
+      appendMessage("agent", "Error reaching the agent.", null);
+    }
+
+    btn.disabled = false;
+    btn.textContent = "Send";
+  }
+
+  document.getElementById("chat-btn").addEventListener("click", sendChat);
+  document.getElementById("chat-input").addEventListener("keydown", e => {
+    if (e.key === "Enter") sendChat();
+  });
 
   document.getElementById("add-btn").addEventListener("click", addMonitor);
   document.getElementById("input-url").addEventListener("keydown", e => {
